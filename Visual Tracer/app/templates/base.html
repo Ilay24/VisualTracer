@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} | VISUAL TRACER</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: url('{{ url_for('static', filename='img/background.jpg') }}') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .sidebar {
+            height: 100vh;
+            background-color: #102542;
+            padding: 1rem;
+            position: fixed;
+            width: 220px;
+            top: 0;
+            left: 0;
+            color: white;
+        }
+        .sidebar .nav-link {
+            color: #cbd5e0;
+            margin: 0.5rem 0;
+        }
+        .sidebar .nav-link:hover {
+            color: #ffffff;
+        }
+        .main-content {
+            margin-left: 240px;
+            padding: 2rem;
+        }
+        .navbar-custom {
+            background-color: #1a2c4b;
+            color: white;
+            margin-left: 220px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            padding: 0 2rem;
+        }
+        .navbar-custom .nav-link {
+            color: white;
+            padding: 0 1rem;
+        }
+        .avatar-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .home-card {
+            border-radius: 0.75rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+            background: rgba(255, 255, 255, 0.95);
+        }
+        .home-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .home-welcome h1, .home-welcome p {
+            font-family: 'Orbitron', sans-serif;
+            color: #ffffff !important;
+            text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="container mt-3">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    <div class="sidebar">
+        <a class="d-flex align-items-center justify-content-center mb-3" href="{{ url_for('main.index') }}">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" style="height: 48px;">
+        </a>
+        <hr>
+        {% if current_user.is_authenticated %}
+            <a class="nav-link" href="{{ url_for('tools.traceroute_page') }}">Visual Traceroute</a>
+            <a class="nav-link" href="{{ url_for('tools.ip_location') }}">IP Location</a>
+            <a class="nav-link" href="{{ url_for('tools.dns_lookup') }}">DNS Lookup</a>
+            <a class="nav-link" href="{{ url_for('tools.whois_lookup') }}">WHOIS Lookup</a>
+            <a class="nav-link" href="{{ url_for('tools.guess_where') }}">Guess Where</a>
+            <a class="nav-link" href="{{ url_for('tools.map_maker') }}">MapMaker</a>
+            <a class="nav-link" href="{{ url_for('tools.history') }}">History</a>
+            <div style="position: absolute; bottom: 1rem; width: calc(100% - 2rem);">
+                <hr style="border-top: 1px solid rgba(255,255,255,0.2);">
+                <a class="nav-link text-danger" href="{{ url_for('auth.logout') }}">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        {% endif %}
+    </div>
+    <nav class="navbar navbar-custom justify-content-end">
+        <div class="d-flex align-items-center">
+            {% if current_user.is_authenticated %}
+            <div class="dropdown">
+                <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
+                    <img src="{{ url_for('static', filename='uploads/' + current_user.profile_image) }}" class="avatar-img me-2">
+                    {{ current_user.username }}
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{{ url_for('profile.view_profile') }}">Profile</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('profile.edit_profile') }}">Edit Profile</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a></li>
+                </ul>
+            </div>
+            {% else %}
+            <a class="nav-link text-white" href="{{ url_for('auth.login') }}">Login</a>
+            <a class="nav-link text-white" href="{{ url_for('auth.register') }}">Register</a>
+            {% endif %}
+        </div>
+    </nav>
+    <div class="main-content">
+        {% if request.endpoint == 'main.index' %}
+        <div class="home-welcome container">
+          <h1 class="mb-4 animate__animated animate__fadeInDown">Welcome{{ ', ' + current_user.username if current_user.is_authenticated else '' }} to <span style="color:#00bcd4;">VISUAL TRACER</span></h1>
+          <p class="lead animate__animated animate__fadeIn">Explore the Internet like never before – with real-time tracing, maps, and games.</p>
+
+          <div class="row mt-5">
+            {% if current_user.is_authenticated %}
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.traceroute_page') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-network-wired fa-3x mb-3 text-primary"></i>
+                  <h5>Visual Traceroute</h5>
+                  <p class="small text-muted">Track the path packets take across the internet on a world map.</p>
+                </a>
+              </div>
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.ip_location') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-map-marker-alt fa-3x mb-3 text-primary"></i>
+                  <h5>IP Location</h5>
+                  <p class="small text-muted">Find out where an IP address is located, including country and city.</p>
+                </a>
+              </div>
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.dns_lookup') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-server fa-3x mb-3 text-primary"></i>
+                  <h5>DNS Lookup</h5>
+                  <p class="small text-muted">Get DNS records (A, MX, TXT, etc.) for any domain name.</p>
+                </a>
+              </div>
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.whois_lookup') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-search fa-3x mb-3 text-primary"></i>
+                  <h5>WHOIS Lookup</h5>
+                  <p class="small text-muted">See registration data and domain owner information.</p>
+                </a>
+              </div>
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.guess_where') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-globe fa-3x mb-3 text-primary"></i>
+                  <h5>Guess Where</h5>
+                  <p class="small text-muted">Play a geo-guessing game based on real street views.</p>
+                </a>
+              </div>
+              <div class="col-md-4 mb-4">
+                <a href="{{ url_for('tools.map_maker') }}" class="card shadow-sm text-center p-4 home-card h-100 text-decoration-none text-dark">
+                  <i class="fas fa-project-diagram fa-3x mb-3 text-primary"></i>
+                  <h5>Map Maker</h5>
+                  <p class="small text-muted">Build a connected map of IPs/domains and save it as an image.</p>
+                </a>
+              </div>
+            {% else %}
+              <div class="col-md-12 text-center mt-4">
+                <a href="{{ url_for('auth.login') }}" class="btn btn-lg btn-primary me-2">Login</a>
+                <a href="{{ url_for('auth.register') }}" class="btn btn-lg btn-outline-light">Register</a>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="d-flex justify-content-center mt-4">
+            <a href="{{ url_for('tools.history') }}" class="card shadow-sm text-center p-4 home-card text-decoration-none text-dark" style="width: 300px;">
+              <i class="fas fa-history fa-3x mb-3 text-primary"></i>
+              <h5>Traceroute History</h5>
+              <p class="small text-muted">View your previously run traceroutes and explore past paths.</p>
+            </a>
+          </div>
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
