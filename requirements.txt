@@ -4,7 +4,6 @@ Flask-Login==0.6.2
 Flask-Migrate==4.0.5
 Flask-WTF==1.2.1
 Werkzeug==2.3.7
-# psycopg2-binary==2.9.9  # Commented out - not needed for SQLite
 python-dotenv==1.0.0
 Pillow==10.1.0
 requests==2.31.0
@@ -14,6 +13,6 @@ dnspython==2.4.2
 bcrypt==4.0.1
 wtforms==3.0.1
 email-validator==2.0.0.post2
-SQLAlchemy~=2.0.23
-itsdangerous~=2.2.0
-Flask-Mail
+SQLAlchemy==2.0.23
+itsdangerous==2.2.0
+Flask-Mail==0.9.1
