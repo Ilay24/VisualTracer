@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    #map {
+        height: 500px;
+        width: 100%;
+        border-radius: 0.25rem;
+        margin-bottom: 20px;
+    }
+    .location-table td, .location-table th {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Map Maker</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="input" class="form-label">Domain or IP</label>
+                    <input type="text" id="input" class="form-control" placeholder="example.com or 8.8.8.8">
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-secondary" onclick="addPoint()">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                    <button class="btn btn-primary" onclick="generateMap()">
+                        <i class="fas fa-map"></i> Make Map
+                    </button>
+                    <button id="save-map-btn" class="btn btn-success" onclick="saveMapAsImage()">
+    <i class="fas fa-image"></i> Save Map to PNG
+</button>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Location Table</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped location-table">
+                       <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>IP</th>
+                                <th>City</th>
+                                <th>Region</th>
+                                <th>Country</th>
+                                <th>Coordinates</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="location-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Map View</h5>
+            </div>
+            <div class="card-body p-0">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+<script>
+    let map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let markers = [];
+    let polyline = null;
+    let locations = [];
+
+    function addPoint() {
+        const input = document.getElementById('input').value.trim();
+        if (!input) {
+            alert('Please enter a valid domain or IP address.');
+            return;
+        }
+
+        fetch('/tools/map-maker/ip/get?target=' + encodeURIComponent(input))
+            .then(response => response.json())
+            .then(data => {
+                if (!data.location || !data.location.loc) {
+                    alert('Location not found. Please make sure the address is correct.');
+                    return;
+                }
+                locations.push(data);
+                updateTable();
+                document.getElementById('input').value = '';
+            })
+            .catch(error => alert('Error: ' + error.message));
+    }
+function removePoint(index) {
+    if (index >= 0 && index < locations.length) {
+        locations.splice(index, 1);
+        updateTable();
+        generateMap();
+    }
+}
+
+ function updateTable() {
+    const body = document.getElementById('location-table-body');
+    body.innerHTML = '';
+
+    locations.forEach((loc, index) => {
+        const tr = document.createElement('tr');
+        const [lat, lng] = loc.location.loc.split(',');
+        tr.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${loc.ip}</td>
+            <td>${loc.location.city || '-'}</td>
+            <td>${loc.location.region || '-'}</td>
+            <td>${loc.location.country || '-'}</td>
+            <td>${lat}, ${lng}</td>
+            <td><button class="btn btn-sm btn-danger" onclick="removePoint(${index})">🗑️</button></td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+
+    function generateMap() {
+        clearMap();
+        const coordinates = [];
+
+        locations.forEach((loc, index) => {
+            const [lat, lng] = loc.location.loc.split(',').map(parseFloat);
+            coordinates.push([lat, lng]);
+            const marker = L.marker([lat, lng]).addTo(map);
+            marker.bindPopup(`<b>#${index + 1}</b><br>${loc.ip}<br>${loc.location.city || ''}, ${loc.location.country || ''}`);
+            marker.bindTooltip(`#${index + 1}`, { permanent: true, direction: 'top' }).openTooltip();
+            markers.push(marker);
+        });
+
+        if (coordinates.length >= 2) {
+            polyline = L.polyline(coordinates, { color: 'blue' }).addTo(map);
+            map.fitBounds(polyline.getBounds());
+        } else if (coordinates.length === 1) {
+            map.setView(coordinates[0], 10);
+        }
+    }
+
+    function clearMap() {
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
+        if (polyline) {
+            map.removeLayer(polyline);
+            polyline = null;
+        }
+        map.setView([0, 0], 2);
+    }
+
+  function saveMapAsImage() {
+    const saveBtn = document.getElementById('save-map-btn');
+
+    leafletImage(map, function(err, canvas) {
+        if (err) {
+            alert('Error capturing map: ' + err.message);
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.download = 'map_' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+        link.href = canvas.toDataURL();
+        link.click();
+
+        // מחליף את טקסט הכפתור ל-"✔ Saved!"
+        const originalHTML = saveBtn.innerHTML;
+        saveBtn.innerHTML = '✔ Saved!';
+        saveBtn.classList.remove('btn-success');
+        saveBtn.classList.add('btn-secondary');
+
+        // מחזיר חזרה אחרי 2 שניות
+        setTimeout(() => {
+            saveBtn.innerHTML = originalHTML;
+            saveBtn.classList.remove('btn-secondary');
+            saveBtn.classList.add('btn-success');
+        }, 2000);
+    });
+}
+
+// מאזין ללחיצת ENTER בתיבת הקלט
+document.getElementById('input').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        addPoint();
+    }
+});
+
+</script>
+{% endblock %}

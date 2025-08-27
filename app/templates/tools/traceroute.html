@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+<style>
+    #map {
+        height: 500px;
+        width: 100%;
+        border-radius: 0.25rem;
+    }
+    .hop-info {
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        margin-bottom: 10px;
+    }
+    .hop-info:hover {
+        background-color: #e9ecef;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">
+                    {% if history_item %}
+                        Traceroute Results
+                    {% else %}
+                        Visual Traceroute
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if not history_item %}
+                <form id="traceroute-form">
+                    <div class="mb-3">
+                        <label for="target" class="form-label">Domain or IP Address</label>
+                        <input type="text" class="form-control" id="target" name="target" required
+                               placeholder="e.g., google.com or 8.8.8.8">
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary" id="run-traceroute">
+                            <i class="fas fa-network-wired"></i> Run Traceroute
+                        </button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="mb-3">
+                    <strong>Target:</strong> {{ history_item.target }}
+                </div>
+                <div class="mb-3">
+                    <strong>Date:</strong> {{ history_item.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                </div>
+                <div class="d-grid">
+                    <a href="{{ url_for('tools.history') }}" class="btn btn-secondary">
+                        <i class="fas fa-history"></i> Back to History
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-4" id="results-card" style="display: none;">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">Hops</h3>
+            </div>
+            <div class="card-body">
+                <div id="hop-results">
+                    <!-- Hop results will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">Visual Map</h3>
+            </div>
+            <div class="card-body p-0">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script>
+    // Initialize the map
+    var map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var markers = [];
+    var polyline = null;
+
+    // If this is a history item view, load the data
+    {% if history_item %}
+        document.addEventListener('DOMContentLoaded', function() {
+            const historyData = {{ history_item.get_result()|tojson }};
+            displayResults(historyData);
+        });
+    {% endif %}
+
+    // Handle form submission
+    document.getElementById('traceroute-form')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const target = document.getElementById('target').value;
+        if (!target) return;
+
+        // Show loading state
+        const button = document.getElementById('run-traceroute');
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+
+        // Clear previous results
+        clearMap();
+
+        // Call the backend API
+        fetch('/tools/traceroute/run', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ target: target })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Reset button
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-network-wired"></i> Run Traceroute';
+
+            // Display the results
+            displayResults(data);
+        })
+        .catch(error => {
+            // Reset button
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-network-wired"></i> Run Traceroute';
+
+            // Show error
+            alert('Error: ' + error.message);
+        });
+    });
+
+    function displayResults(data) {
+        // Show results card
+        document.getElementById('results-card').style.display = 'block';
+
+        const hopsContainer = document.getElementById('hop-results');
+        hopsContainer.innerHTML = '';
+
+        const coordinates = [];
+
+        // Process each hop
+        data.hops.forEach(hop => {
+            // Create hop info element
+            const hopEl = document.createElement('div');
+            hopEl.className = 'hop-info';
+
+            let locationText = 'Unknown Location';
+            if (hop.location && hop.location.city !== 'Unknown') {
+                locationText = `${hop.location.city}, ${hop.location.region}, ${hop.location.country}`;
+            }
+
+            hopEl.innerHTML = `
+                <strong>Hop ${hop.hop}</strong>: ${hop.ip}
+                <div><small>${locationText}</small></div>
+            `;
+
+            hopsContainer.appendChild(hopEl);
+
+            // Add to map if location data is available
+            if (hop.location && hop.location.loc) {
+                const [lat, lng] = hop.location.loc.split(',').map(parseFloat);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    coordinates.push([lat, lng]);
+
+                    // Create marker
+                    const marker = L.marker([lat, lng]).addTo(map);
+                    marker.bindPopup(`<b>Hop ${hop.hop}</b><br>${hop.ip}<br>${locationText}`);
+                    markers.push(marker);
+                }
+            }
+        });
+
+        // Create path line
+        if (coordinates.length >= 2) {
+            polyline = L.polyline(coordinates, {color: 'blue'}).addTo(map);
+            map.fitBounds(polyline.getBounds());
+        } else if (coordinates.length === 1) {
+            map.setView(coordinates[0], 10);
+        }
+    }
+
+    function clearMap() {
+        // Remove all markers
+        markers.forEach(marker => {
+            map.removeLayer(marker);
+        });
+        markers = [];
+
+        // Remove polyline
+        if (polyline) {
+            map.removeLayer(polyline);
+            polyline = null;
+        }
+
+        // Reset view
+        map.setView([0, 0], 2);
+    }
+</script>
+{% endblock %}
