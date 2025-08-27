@@ -1,5 +1,5 @@
 from app import create_app
-# main color:#102542
+
 
 app = create_app()
 if __name__ == '__main__':

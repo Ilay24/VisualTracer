@@ -1,7 +1,10 @@
 services:
   - type: web
-    name: visual-tracer
+    name: visualtracer
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn run:app"
-    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+
